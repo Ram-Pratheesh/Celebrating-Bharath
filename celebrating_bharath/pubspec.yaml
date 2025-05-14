@@ -1,0 +1,52 @@
+name: celebrating_bharath
+description: "A new Flutter project."
+publish_to: 'none' # Prevents accidental publishing to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Cupertino icons for iOS-style icons
+  cupertino_icons: ^1.0.8
+  # For handling SVG files
+  flutter_svg: ^2.1.0
+  path_parsing: ^1.1.0
+  path_drawing: ^1.0.1
+  video_player: ^2.9.5
+  cloudinary_flutter: ^1.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Linting package to ensure good coding practices
+  flutter_lints: ^5.0.0
+
+flutter:
+  # Enabling Material Design icons
+  uses-material-design: true
+
+  # Adding assets section for your SVG and other assets
+  assets:
+    - assets/my1.svg   # Old map with state IDs
+    - assets/mp.svg  
+    - assets/Celebrating_Bharath.jpeg 
+     # New map with the national flag
+    # You can add any other assets like images, fonts, etc.
+    # Example:
+    # - images/my_image.png
+    # - fonts/CustomFont.ttf
+
+# Uncomment if you have custom fonts you want to include
+# flutter:
+#   fonts:
+#     - family: MyCustomFont
+#       fonts:
+#         - asset: fonts/MyCustomFont-Regular.ttf
+#         - asset: fonts/MyCustomFont-Bold.ttf
+#           weight: 700
