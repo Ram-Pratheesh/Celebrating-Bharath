@@ -2,102 +2,57 @@ import 'package:celebrating_bharath/data/state_paths.dart';
 import 'package:celebrating_bharath/widgets/video_player_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:celebrating_bharath/widgets/state_providers.dart'; // adjust path accordingly
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
+class _HomeScreenState extends ConsumerState<HomeScreen>
     with SingleTickerProviderStateMixin {
   final TransformationController _transformationController =
       TransformationController();
-  final GlobalKey _mapKey = GlobalKey();
 
   late AnimationController _animationController;
   Animation<Matrix4>? _animation;
 
-  String? _selectedState;
-  bool _showInfo = false;
-
-  Size? _mapSize; // Store actual rendered map size
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _animationController.addListener(() {
-      _transformationController.value = _animation!.value;
-    });
-
-    // Wait for layout and get map size
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateMapSize();
-    });
-  }
-
-  void _updateMapSize() {
-    final box = _mapKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box != null) {
-      setState(() {
-        _mapSize = box.size;
-      });
-      debugPrint(
-        "🗺️ Map rendered size: ${box.size.width} x ${box.size.height}",
-      );
-    }
-  }
-
-  // Helper: get scaled offset for pin from relative offset
-  Offset _getScaledOffset(Offset relativeOffset) {
-    if (_mapSize == null) return Offset.zero;
+  // Convert relative offsets (0..1) into absolute pixel positions based on current map size
+  Offset _getScaledOffset(Offset relativeOffset, Size mapSize) {
     return Offset(
-      relativeOffset.dx * _mapSize!.width,
-      relativeOffset.dy * _mapSize!.height,
+      relativeOffset.dx * mapSize.width,
+      relativeOffset.dy * mapSize.height,
     );
   }
 
-  void _onTapUp(TapUpDetails details) {
-    final RenderBox? box =
-        _mapKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) {
-      print("❌ Map container not ready.");
-      return;
-    }
-
-    final Offset localPosition = box.globalToLocal(details.globalPosition);
-    print("📍 TAP OFFSET relative to map: $localPosition");
-
-    const double tapRadius = 20.0;
+  // Handle taps on the map, find if tap is within tapRadius for any state pin
+  void _onTapUp(TapUpDetails details, Size mapSize) {
+    final localPosition = details.localPosition;
+    debugPrint("📍 TAP OFFSET relative to map: $localPosition");
 
     for (final entry in statePins.entries) {
       final stateName = entry.key;
-      final Offset relativeOffset = entry.value['relativeOffset'] as Offset;
-      final Offset pinPosition = _getScaledOffset(relativeOffset);
+      final data = entry.value;
+      final Offset relativeOffset = data['relativeOffset'] as Offset;
+      final double tapRadius = (data['tapRadius'] as double?) ?? 20.0;
+      final Offset pinPosition = _getScaledOffset(relativeOffset, mapSize);
 
       if ((pinPosition - localPosition).distance <= tapRadius) {
-        print("✅ Matched state: $stateName");
+        debugPrint("✅ Matched state: $stateName");
         _zoomToState(pinPosition);
-        setState(() {
-          _selectedState = stateName;
-          _showInfo = true;
-        });
+        ref.read(selectionProvider.notifier).select(stateName);
         return;
       }
     }
 
-    print("❌ No matching pin found.");
-    setState(() {
-      _selectedState = null;
-      _showInfo = false;
-    });
+    debugPrint("❌ No matching pin found.");
+    ref.read(selectionProvider.notifier).clear();
   }
 
+  // Animate zoom and pan to a specific position on the map
   void _zoomToState(Offset position) {
     const double targetScale = 2.5;
     final x = -position.dx * (targetScale - 1);
@@ -118,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen>
     _animationController.forward(from: 0);
   }
 
+  // Animate zoom out to full map view
   void _zoomOut() {
     const double targetScale = 1.0;
     final currentMatrix = _transformationController.value;
@@ -132,6 +88,22 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   @override
+  void initState() {
+    super.initState();
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _animationController.addListener(() {
+      if (_animation != null) {
+        _transformationController.value = _animation!.value;
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _animationController.dispose();
     _transformationController.dispose();
@@ -140,118 +112,159 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final selectionState = ref.watch(selectionProvider);
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Celebrating Bharath")),
-      body: Container(
-        color: const Color(0xFFADD8E6), // Ocean Blue Background
-        child: Stack(
-          children: [
-            GestureDetector(
-              onTapUp: _onTapUp,
-              child: InteractiveViewer(
-                transformationController: _transformationController,
-                minScale: 0.5,
-                maxScale: 3.0,
-                child: SizedBox(
-                  key: _mapKey,
-                  width: 1519,
-                  height: 1773,
-                  child: Stack(
-                    children: [
-                      SvgPicture.asset(
-                        'assets/mp.svg',
-                        width: 1519,
-                        height: 1773,
-                        fit: BoxFit.fill,
-                        alignment: Alignment.topLeft,
-                      ),
-                      if (_mapSize != null)
-                        ...statePins.entries.map((entry) {
-                          final stateName = entry.key;
-                          final relativeOffset =
-                              entry.value['relativeOffset'] as Offset;
-                          final offset = _getScaledOffset(relativeOffset);
-                          return Positioned(
-                            left: offset.dx - 12,
-                            top: offset.dy - 24,
-                            child: Opacity(
-                              opacity: 1.0, // Visible pins; set to 0.0 to hide
-                              child: GestureDetector(
-                                onTap: () {
-                                  _zoomToState(offset);
-                                  setState(() {
-                                    _selectedState = stateName;
-                                    _showInfo = true;
-                                  });
-                                },
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: const Text(
-                                    '📍',
-                                    style: TextStyle(fontSize: 30),
+      body: SafeArea(
+        child: Container(
+          color: const Color(0xFFADD8E6),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final mapSize = Size(constraints.maxWidth, constraints.maxHeight);
+              debugPrint("🗺️ Rendered map size: $mapSize");
+
+              return Stack(
+                children: [
+                  GestureDetector(
+                    onTapUp: (details) => _onTapUp(details, mapSize),
+                    child: InteractiveViewer(
+                      transformationController: _transformationController,
+                      minScale: 0.5,
+                      maxScale: 3.0,
+                      child: SizedBox(
+                        width: mapSize.width,
+                        height: mapSize.height,
+                        child: Stack(
+                          children: [
+                            SvgPicture.asset(
+                              'assets/mp.svg',
+                              width: mapSize.width,
+                              height: mapSize.height,
+                              fit: BoxFit.fill,
+                              alignment: Alignment.topLeft,
+                            ),
+                            // Render markers for each state
+                            ...statePins.entries.map((entry) {
+                              final stateName = entry.key;
+                              final relativeOffset =
+                                  entry.value['relativeOffset'] as Offset;
+                              final offset = _getScaledOffset(
+                                relativeOffset,
+                                mapSize,
+                              );
+                              return Positioned(
+                                left: offset.dx - 12,
+                                top: offset.dy - 24,
+                                child: Opacity(
+                                  opacity: 1.0,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      _zoomToState(offset);
+                                      ref
+                                          .read(selectionProvider.notifier)
+                                          .select(stateName);
+                                    },
+                                    child: const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: Text(
+                                        '📍',
+                                        style: TextStyle(fontSize: 30),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            if (_showInfo && _selectedState != null)
-              Positioned(
-                bottom: 20,
-                left: 20,
-                right: 20,
-                child: Card(
-                  elevation: 8,
-                  color: Colors.white,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back),
-                              onPressed: () {
-                                _zoomOut();
-                                setState(() {
-                                  _showInfo = false;
-                                  _selectedState = null;
-                                });
-                              },
-                            ),
-                            Text(
-                              _selectedState!,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                              );
+                            }),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        Text(statePins[_selectedState!]['description'] ?? ''),
-                        const SizedBox(height: 10),
-                        if ((statePins[_selectedState!]['videoUrl'] ?? '')
-                            .isNotEmpty)
-                          AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: VideoPlayerWidget(
-                              videoUrl: statePins[_selectedState!]['videoUrl'],
-                            ),
-                          ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
-          ],
+                  // Info panel shown when a state is selected
+                  if (selectionState.showInfo &&
+                      selectionState.selectedState != null)
+                    Positioned(
+                      bottom: 20,
+                      left: 20,
+                      right: 20,
+                      child: Card(
+                        elevation: 8,
+                        color: Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_back),
+                                    onPressed: () {
+                                      _zoomOut();
+                                      ref
+                                          .read(selectionProvider.notifier)
+                                          .clear();
+                                    },
+                                  ),
+                                  // Make the state name text tappable with underline
+                                  GestureDetector(
+                                    onTap: () {
+                                      final selected =
+                                          selectionState.selectedState!;
+                                      final Offset relativeOffset =
+                                          statePins[selected]['relativeOffset']
+                                              as Offset;
+                                      final Size mapSize = Size(
+                                        MediaQuery.of(context).size.width,
+                                        MediaQuery.of(context).size.height,
+                                      );
+                                      final Offset pinPosition =
+                                          _getScaledOffset(
+                                            relativeOffset,
+                                            mapSize,
+                                          );
+                                      _zoomToState(pinPosition);
+                                    },
+                                    child: Text(
+                                      selectionState.selectedState!,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                statePins[selectionState
+                                        .selectedState!]['description'] ??
+                                    '',
+                              ),
+                              const SizedBox(height: 10),
+                              if ((statePins[selectionState
+                                          .selectedState!]['videoUrl'] ??
+                                      '')
+                                  .isNotEmpty)
+                                AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: VideoPlayerWidget(
+                                    videoUrl:
+                                        statePins[selectionState
+                                            .selectedState!]['videoUrl'],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
