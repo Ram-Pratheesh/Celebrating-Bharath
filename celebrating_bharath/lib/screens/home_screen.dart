@@ -20,7 +20,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   late AnimationController _animationController;
   Animation<Matrix4>? _animation;
 
-  // Convert relative offsets (0..1) into absolute pixel positions based on current map size
+  // Control opacity here (0.0 - 1.0)
+  static const double markerOpacity = 1.0;
+  static const double touchBoxOpacity =
+      0.2; // >0 to visualize tap area for debug
+
   Offset _getScaledOffset(Offset relativeOffset, Size mapSize) {
     return Offset(
       relativeOffset.dx * mapSize.width,
@@ -28,7 +32,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  // Handle taps on the map, find if tap is within tapRadius for any state pin
   void _onTapUp(TapUpDetails details, Size mapSize) {
     final localPosition = details.localPosition;
     debugPrint("📍 TAP OFFSET relative to map: $localPosition");
@@ -37,11 +40,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       final stateName = entry.key;
       final data = entry.value;
       final Offset relativeOffset = data['relativeOffset'] as Offset;
-      final double tapRadius = (data['tapRadius'] as double?) ?? 20.0;
       final Offset pinPosition = _getScaledOffset(relativeOffset, mapSize);
 
-      if ((pinPosition - localPosition).distance <= tapRadius) {
+      // Use relative ratios for width/height of tap area (default fallback)
+      final double touchWidthRatio =
+          (data['touchWidthRatio'] as double?) ?? 0.1;
+      final double touchHeightRatio =
+          (data['touchHeightRatio'] as double?) ?? 0.05;
+
+      final double touchWidth = touchWidthRatio * mapSize.width;
+      final double touchHeight = touchHeightRatio * mapSize.height;
+
+      final rectLeft = pinPosition.dx - touchWidth / 2;
+      final rectTop = pinPosition.dy - touchHeight / 2;
+      final rect = Rect.fromLTWH(rectLeft, rectTop, touchWidth, touchHeight);
+
+      if (rect.contains(localPosition)) {
         debugPrint("✅ Matched state: $stateName");
+        debugPrint("📍 Tap at $localPosition matched state: $stateName");
         _zoomToState(pinPosition);
         ref.read(selectionProvider.notifier).select(stateName);
         return;
@@ -52,7 +68,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ref.read(selectionProvider.notifier).clear();
   }
 
-  // Animate zoom and pan to a specific position on the map
   void _zoomToState(Offset position) {
     const double targetScale = 2.5;
     final x = -position.dx * (targetScale - 1);
@@ -73,7 +88,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _animationController.forward(from: 0);
   }
 
-  // Animate zoom out to full map view
   void _zoomOut() {
     const double targetScale = 1.0;
     final currentMatrix = _transformationController.value;
@@ -143,35 +157,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                               fit: BoxFit.fill,
                               alignment: Alignment.topLeft,
                             ),
-                            // Render markers for each state
                             ...statePins.entries.map((entry) {
                               final stateName = entry.key;
+                              final data = entry.value;
                               final relativeOffset =
-                                  entry.value['relativeOffset'] as Offset;
+                                  data['relativeOffset'] as Offset;
                               final offset = _getScaledOffset(
                                 relativeOffset,
                                 mapSize,
                               );
+
+                              // Relative tap box sizes
+                              final double touchWidthRatio =
+                                  (data['touchWidthRatio'] as double?) ?? 0.1;
+                              final double touchHeightRatio =
+                                  (data['touchHeightRatio'] as double?) ?? 0.05;
+
+                              final double touchWidth =
+                                  touchWidthRatio * mapSize.width;
+                              final double touchHeight =
+                                  touchHeightRatio * mapSize.height;
+
                               return Positioned(
-                                left: offset.dx - 12,
-                                top: offset.dy - 24,
-                                child: Opacity(
-                                  opacity: 1.0,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      _zoomToState(offset);
-                                      ref
-                                          .read(selectionProvider.notifier)
-                                          .select(stateName);
-                                    },
-                                    child: const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: Text(
-                                        '📍',
-                                        style: TextStyle(fontSize: 30),
+                                left: offset.dx - touchWidth / 2,
+                                top: offset.dy - touchHeight / 2,
+                                width: touchWidth,
+                                height: touchHeight,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.translucent,
+                                  onTap: () {
+                                    _zoomToState(offset);
+                                    ref
+                                        .read(selectionProvider.notifier)
+                                        .select(stateName);
+                                  },
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.withOpacity(
+                                            touchBoxOpacity,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.blueAccent
+                                                .withOpacity(
+                                                  touchBoxOpacity + 0.3,
+                                                ),
+                                            width: 1,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      Opacity(
+                                        opacity: markerOpacity,
+                                        child: const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: Text(
+                                            '📍',
+                                            style: TextStyle(fontSize: 30),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               );
@@ -181,7 +232,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                     ),
                   ),
-                  // Info panel shown when a state is selected
                   if (selectionState.showInfo &&
                       selectionState.selectedState != null)
                     Positioned(
@@ -207,7 +257,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                           .clear();
                                     },
                                   ),
-                                  // Make the state name text tappable with underline
                                   GestureDetector(
                                     onTap: () {
                                       final selected =
@@ -231,7 +280,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                                       style: const TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
-                                        decoration: TextDecoration.underline,
+                                        //decoration: TextDecoration.underline,
                                       ),
                                     ),
                                   ),
