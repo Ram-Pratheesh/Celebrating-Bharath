@@ -1,6 +1,6 @@
+import 'package:celebrating_bharath/splash.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // import Riverpod
-import 'screens/home_screen.dart';
 
 void main() => runApp(
   const ProviderScope(
@@ -16,8 +16,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Celebrating Bharath',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.orange),
-      home: const HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }
