@@ -52,7 +52,7 @@ lib/
 - `video_player` – For video playback  
 - `flutter_riverpod` – For state management  
 
-###Contributing
+##Contributing
 Contributions are welcome! Please fork the repo and create a pull request with your improvements.
 
 
