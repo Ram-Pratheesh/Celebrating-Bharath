@@ -38,7 +38,7 @@ flutter pub get
 ## Run the app:
 flutter run
 
-## Project Structure
+###Project Structure
 lib/
 ├── data/ # Static data such as state paths and metadata
 ├── features/ # (Optional) Feature-based folders for scalability
