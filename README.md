@@ -29,17 +29,13 @@ Celebrating Bharath is an interactive Flutter application that celebrates the cu
 ### Installation
 
 Clone the repository and navigate into it:
-
-```bash
 git clone https://github.com/your-username/celebrating-bharath.git
 cd celebrating-bharath
+
 ## Get dependencies:
-
-```bash
 flutter pub get
-## Run the app:
 
-```bash
+## Run the app:
 flutter run
 
 ## Project Structure
@@ -52,13 +48,11 @@ lib/
 
 
 ## Dependencies
-
 - `flutter_svg` – For rendering SVG maps  
 - `video_player` – For video playback  
 - `flutter_riverpod` – For state management  
 
-## Contributing
-
+###Contributing
 Contributions are welcome! Please fork the repo and create a pull request with your improvements.
 
 
